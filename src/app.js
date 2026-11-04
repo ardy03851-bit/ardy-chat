@@ -31,7 +31,7 @@ let F, firebasePromise, unsubRooms, unsubMessages, unsubTyping, unsubCalls;
 let user=null, rooms=[], current=sampleRooms[0], messages=sampleMessages, saved=[], mode='chat', replyTo=null, attachment=null, draft='', sending=false, authBusy=false, online=navigator.onLine, offlineEnabled=false, cachedUser=null;
 let showDetails=innerWidth>1180, sidebarOpen=false, roomError='', typingTimer, lastTyped=0, toastTimer, installEvent, call=null, callUnsub, candidateUnsub, callTimer, rtc, localStream, remoteStream;
 const messageCache=new Map(), unreads=new Set();
-let globalError='';
+let globalError='', screenStream, previousWide=innerWidth>1180;
 const PRIVATE_CACHE='ardy-private-v1';
 
 async function firebase() {
@@ -480,6 +480,10 @@ function subscribeIncomingCalls() {
   unsubCalls?.();
   unsubCalls=F.onSnapshot(F.query(F.collection(F.db,'calls'),F.where('calleeId','==',user.uid)),snapshot=>{
     const incoming=snapshot.docs.map(d=>({id:d.id,...d.data()})).find(c=>c.status==='ringing'&&Date.now()-date(c.createdAt).getTime()<60000);
+    if(call?.incoming&&call.status==='ringing') {
+      const active=snapshot.docs.find(d=>d.id===call.id);
+      if(!active||active.data().status!=='ringing'){cleanupCall();$('#overlay-root').innerHTML='';notify('This call has ended.');return;}
+    }
     if(incoming&&!call){call={...incoming,incoming:true};renderCall();}
   },()=>{});
 }
@@ -557,7 +561,7 @@ function attachStreams() {
 }
 function cleanupCall() {
   clearTimeout(callTimer);callUnsub?.();candidateUnsub?.();callUnsub=null;candidateUnsub=null;
-  rtc?.close();rtc=null;localStream?.getTracks().forEach(t=>t.stop());localStream=null;remoteStream=null;pendingCandidates=[];call=null;
+  rtc?.close();rtc=null;localStream?.getTracks().forEach(t=>t.stop());screenStream?.getTracks().forEach(t=>t.stop());screenStream=null;localStream=null;remoteStream=null;pendingCandidates=[];call=null;
 }
 async function endCall(status='ended') {
   const id=call?.id;cleanupCall();$('#overlay-root').innerHTML='';
@@ -566,7 +570,7 @@ async function endCall(status='ended') {
 async function screenShare() {
   if(!rtc||!call)return;
   if(!navigator.mediaDevices.getDisplayMedia){notify('Screen sharing is not supported by this browser. Audio and video still work.');return;}
-  try{const stream=await navigator.mediaDevices.getDisplayMedia({video:true});const track=stream.getVideoTracks()[0];const sender=rtc.getSenders().find(s=>s.track?.kind==='video');if(!sender){track.stop();notify('Start a video call to share your screen.');return;}await sender.replaceTrack(track);track.onended=()=>sender.replaceTrack(localStream.getVideoTracks()[0]||null);notify('Your screen is being shared. Use the browser’s Stop sharing control to finish.');}catch(error){if(error.name!=='NotAllowedError')notify(errorMessage(error));}
+  try{const stream=await navigator.mediaDevices.getDisplayMedia({video:true});screenStream=stream;const track=stream.getVideoTracks()[0];const sender=rtc.getSenders().find(s=>s.track?.kind==='video');if(!sender){track.stop();notify('Start a video call to share your screen.');return;}await sender.replaceTrack(track);track.onended=()=>sender.replaceTrack(localStream?.getVideoTracks()[0]||null).catch(()=>{});notify('Your screen is being shared. Use the browser’s Stop sharing control to finish.');}catch(error){if(error.name!=='NotAllowedError')notify(errorMessage(error));}
 }
 
 document.addEventListener('click',async event=>{
@@ -603,6 +607,7 @@ document.addEventListener('click',async event=>{
   try{await actions[action]?.();}catch(error){notify(errorMessage(error));}
 });
 document.addEventListener('click',event=>{if(event.target.classList.contains('overlay-backdrop')&&!call)closeModal();});
+document.addEventListener('click',event=>{if(sidebarOpen&&!event.target.closest('.sidebar,.rail,.mobile-menu')){sidebarOpen=false;$('.app-shell')?.classList.remove('mobile-nav');}});
 document.addEventListener('keydown',event=>{
   if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();searchModal();}
   if(event.key==='Escape'){if(!call)closeModal();if(sidebarOpen){sidebarOpen=false;render();}}
@@ -610,17 +615,17 @@ document.addEventListener('keydown',event=>{
 });
 document.addEventListener('error',event=>{if(event.target instanceof HTMLImageElement){event.target.style.opacity='.2';event.target.alt=event.target.alt||'Image unavailable';}},true);
 window.addEventListener('offline',()=>{online=false;endCall();render();});
-window.addEventListener('online',()=>{online=true;if(user&&current&&!current.sample)openRoom(current.id);else render();});
+window.addEventListener('online',()=>{online=true;if(cachedUser&&F){authChanged(F.auth.currentUser);return;}if(user&&current&&!current.sample)openRoom(current.id);else render();});
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installEvent=event;});
 window.addEventListener('hashchange',()=>{const token=new URLSearchParams(location.hash.slice(1)).get('invite');if(token){if(user)joinSpaceModal(token);else loginModal();}});
-window.addEventListener('resize',()=>{if(innerWidth>640&&sidebarOpen){sidebarOpen=false;$('.app-shell')?.classList.remove('mobile-nav');}});
-window.addEventListener('pagehide',()=>{localStream?.getTracks().forEach(t=>t.stop());});
+window.addEventListener('resize',()=>{if(innerWidth>640&&sidebarOpen){sidebarOpen=false;$('.app-shell')?.classList.remove('mobile-nav');}const wide=innerWidth>1180;if(wide!==previousWide){showDetails=wide;previousWide=wide;$('.app-shell')?.classList.toggle('show-details',wide);$('.app-shell')?.classList.toggle('no-details',!wide);}});
+window.addEventListener('pagehide',()=>{localStream?.getTracks().forEach(t=>t.stop());screenStream?.getTracks().forEach(t=>t.stop());});
 render();
 
 async function boot() {
   const profile=await cacheRead('profile');
   if(profile){offlineEnabled=true;if(!online){cachedUser=profile;rooms=await cacheRead(`${profile.uid}/rooms`)||[];current=rooms[0]||null;messages=current?await cacheRead(`${profile.uid}/messages/${current.id}`)||[]:[];render();}}
-  try{const f=await firebase();f.onAuthStateChanged(f.auth,next=>{if(!next&&!online&&cachedUser)return;authChanged(next);});}
+  try{const f=await firebase();f.onAuthStateChanged(f.auth,next=>{if(!online&&cachedUser){user=next?{...cachedUser}:null;return;}authChanged(next);});}
   catch(error){console.warn('Firebase is unavailable:',error.message);}
   if('serviceWorker' in navigator){try{await navigator.serviceWorker.register(asset('sw.js'),{scope:import.meta.env.BASE_URL});}catch(error){console.info('Install/offline features require a standalone secure origin.');}}
   const invite=new URLSearchParams(location.hash.slice(1)).get('invite');
