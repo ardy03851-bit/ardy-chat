@@ -43,7 +43,7 @@ Emulator tests do not prove Google OAuth, production Firebase rules deployment, 
 
 ## Still requires external activation/validation
 
-- The production Google flow reported an unauthorized hosting domain during local testing. The project owner must authorize the GitHub Pages domain and confirm the Google provider.
+- Google sign-in on the live GitHub Pages URL reported `auth/unauthorized-domain`. The project owner must authorize `ardy03851-bit.github.io` and confirm the Google provider.
 - Publish the reviewed Firestore/Storage rules to the live project; local emulator rules are not a production release.
 - Confirm live Storage provisioning and any billing requirement with the project owner.
 - Test Google login with a real account and a second real person after activation.

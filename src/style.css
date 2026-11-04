@@ -25,6 +25,8 @@
 [data-theme=light] .rail-button.space-button{color:#75563c}
 .chat-title h1,.detail-space-name{overflow-wrap:anywhere}
 .attachment-caption span span{opacity:1!important}
+.app-shell{grid-template-rows:minmax(0,1fr)}
+.sidebar,.chat-main,.rail,.details{min-height:0}
 @media(hover:none){.message-tools{position:static;opacity:1;pointer-events:auto;background:none;border:0;box-shadow:none;justify-content:flex-end;margin-top:var(--space-2)}}
 @media(max-width:640px){.message-tools .optional-tool{display:grid}}
 @media(max-width:850px){.search-launch kbd{display:none}}
