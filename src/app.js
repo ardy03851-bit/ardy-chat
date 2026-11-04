@@ -65,6 +65,7 @@ function errorMessage(error) {
     'auth/operation-not-allowed':'Google sign-in is not enabled yet. Enable Google in Firebase Authentication → Sign-in method.',
     'auth/configuration-not-found':'Firebase Authentication needs to be set up for this project before Google sign-in can work.',
     'auth/popup-blocked':'The browser blocked Google sign-in. Allow pop-ups for this site, then try again.',
+    'auth/operation-not-supported-in-this-environment':'Open Ardy directly on GitHub Pages to sign in. Embedded previews cannot reliably open Google authentication.',
     'auth/popup-closed-by-user':'Sign-in was closed. You can try again whenever you are ready.',
     'auth/cancelled-popup-request':'Another sign-in window is already open.',
     'auth/network-request-failed':'Could not reach Google. Check your connection and try again.',
@@ -127,7 +128,7 @@ function render() {
         ${dmRooms.map((r,i)=>`<button class="nav-item ${current?.id===r.id&&mode==='chat'?'active':''}" data-room="${e(r.id)}">${avatar(r.person||Object.entries(r.memberProfiles||{}).find(([uid])=>uid!==my?.uid)?.[1]||{displayName:roomName(r)},'small')}<span class="dm-name">${e(roomName(r))}</span>${r.sample?'<span class="status-dot"></span>':''}</button>`).join('')||'<p class="detail-description" style="padding:var(--space-3)">Start with a friend’s Ardy ID.</p>'}
       </div>
       <div class="sidebar-note"><div class="eyebrow">${icon(isSample?'LockKeyhole':'Users')}${isSample?'Your people. Your space.':'Better with your people.'}</div><p>${isSample?'Good conversations deserve a place of their own. Make yours here.':'Bring your friends into the conversation with a private invite.'}</p><button data-action="${isSample?'login':'invite'}">${isSample?'Make yourself at home':'Invite a friend'} ${icon('ArrowUpRight')}</button></div>
-      <footer class="sidebar-footer">${avatar(my||{displayName:'Guest'})}<div class="user-info"><strong>${e(my?.displayName||'Make yourself at home')}</strong><span>${my?(online?'Connected':'Offline · read only'):'Sign in to join the conversation'}</span></div>${ib(my?'Settings':'ArrowRight',my?'Settings':'Sign in',my?'settings':'login')}</footer>
+      <footer class="sidebar-footer">${avatar(my||{displayName:'Guest'})}<div class="user-info"><strong>${e(my?.displayName||'Join Ardy')}</strong><span>${my?(online?'Connected':'Offline · read only'):'Continue with Google'}</span></div>${ib(my?'Settings':'ArrowRight',my?'Settings':'Sign in',my?'settings':'login')}</footer>
     </aside>
     <main class="chat-main" id="conversation" tabindex="-1">${mode==='chat'?chatHTML():alternateHTML()}</main>
     <aside class="details" aria-label="Conversation details">${detailsHTML()}</aside>
@@ -407,6 +408,7 @@ function settingsModal() {
 async function toggleOffline(button) {
   if(!user){formError(new Error('Sign in before enabling offline reading.'));return;}
   offlineEnabled=!offlineEnabled;
+  button.setAttribute('aria-checked',String(offlineEnabled));
   if(offlineEnabled){
     await cacheWrite('profile',user);await cacheWrite(`${user.uid}/rooms`,rooms);await snapshotRoom();
     if(!('caches' in window)){offlineEnabled=false;formError(new Error('Offline storage is unavailable in this browser. Open Ardy directly in Safari or Chrome.'));return;}
